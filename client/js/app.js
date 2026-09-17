@@ -209,23 +209,33 @@ async function renderDashboardPage() {
     const todayStr = new Date().toISOString().split('T')[0];
 
     const { data: patients } = await supabaseClient.from('patients').select('*');
-    const { data: logs } = await supabaseClient.from('logs').select('*').order('sent_at', { ascending: false }).limit(5);
+    const { data: logs } = await supabaseClient.from('logs').select('*').order('sent_at', { ascending: false });
 
     const totalPatients = patients ? patients.length : 0;
     const dueToday = patients ? patients.filter(p => p.due_date === todayStr).length : 0;
 
+    // Perhitungan Sinkronisasi Dashboard
+    const recentLogs = logs ? logs.slice(0, 5) : [];
+    const remindedPatientIds = logs ? [...new Set(logs.filter(l => l.status === 'Terkirim').map(l => l.patient_id))] : [];
+    const countReminded = remindedPatientIds.length;
+    const countNotReminded = Math.max(0, totalPatients - countReminded);
+
     const elTotal = document.getElementById('stat-total');
     const elToday = document.getElementById('stat-today');
+    const elNotReminded = document.getElementById('stat-not-reminded');
+    const elReminded = document.getElementById('stat-reminded');
     const tbody = document.getElementById('dashboard-recent-logs');
 
     if (elTotal) elTotal.textContent = totalPatients;
     if (elToday) elToday.textContent = dueToday;
+    if (elNotReminded) elNotReminded.textContent = countNotReminded;
+    if (elReminded) elReminded.textContent = countReminded;
 
     if (tbody) {
-      if (!logs || logs.length === 0) {
+      if (!recentLogs || recentLogs.length === 0) {
         tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Belum ada aktivitas pengiriman.</td></tr>`;
       } else {
-        tbody.innerHTML = logs.map(l => `
+        tbody.innerHTML = recentLogs.map(l => `
           <tr>
             <td>${new Date(l.sent_at).toLocaleString('id-ID')}</td>
             <td><strong>${escapeHtml(l.patient_name)}</strong></td>
@@ -771,14 +781,37 @@ async function fetchLogs() {
         <td>${escapeHtml(l.template_title || '-')}</td>
         <td><span class="badge ${l.status === 'Terkirim' ? 'badge-success' : 'badge-warning'}">${l.status}</span></td>
         <td>
-          <button class="btn-icon-only danger" onclick="openDeleteModal('log', ${l.id}, 'Riwayat ${escapeHtml(l.patient_name)}')" title="Hapus">
-            <i data-lucide="trash-2"></i>
-          </button>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            ${l.status !== 'Terkirim' ? `
+              <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.75rem; background-color: #2e7d32; color: #fff; border: none;" onclick="markLogAsSent(${l.id})">
+                Set "Sudah Dikirim"
+              </button>
+            ` : ''}
+            <button class="btn-icon-only danger" onclick="openDeleteModal('log', ${l.id}, 'Riwayat ${escapeHtml(l.patient_name)}')" title="Hapus">
+              <i data-lucide="trash-2"></i>
+            </button>
+          </div>
         </td>
       </tr>
     `).join('');
     if (window.lucide) lucide.createIcons();
   } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function markLogAsSent(logId) {
+  try {
+    const { error } = await supabaseClient
+      .from('logs')
+      .update({ status: 'Terkirim' })
+      .eq('id', logId);
+
+    if (error) throw error;
+
+    showToast('Status berhasil diubah menjadi Terkirim!', 'success');
+    fetchLogs();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
 // ==========================================
