@@ -1,0 +1,29 @@
+{
+  "name": "rehab-reminder",
+  "version": "1.0.0",
+  "description": "Aplikasi Reminder Peserta REHAB BPJS Kesehatan via WhatsApp Semi-Otomatis",
+  "type": "module",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "nodemon server/server.js"
+  },
+  "keywords": [
+    "rehab",
+    "bpjs",
+    "whatsapp-reminder",
+    "supabase",
+    "express"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.8",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}

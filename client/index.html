@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>REHAB Reminder - BPJS Kesehatan</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="brand">
+        <i data-lucide="shield-check" class="brand-icon"></i>
+        <div class="brand-text">
+          <h2>REHAB</h2>
+          <span>Reminder System</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <a href="#dashboard" class="nav-item active" data-page="dashboard">
+          <i data-lucide="layout-dashboard"></i>
+          <span>Dashboard</span>
+        </a>
+        <a href="#peserta" class="nav-item" data-page="peserta">
+          <i data-lucide="users"></i>
+          <span>Peserta REHAB</span>
+        </a>
+        <a href="#reminder" class="nav-item" data-page="reminder">
+          <i data-lucide="send"></i>
+          <span>Reminder Center</span>
+        </a>
+        <a href="#template" class="nav-item" data-page="template">
+          <i data-lucide="file-text"></i>
+          <span>Template Pesan</span>
+        </a>
+        <a href="#riwayat" class="nav-item" data-page="riwayat">
+          <i data-lucide="history"></i>
+          <span>Riwayat Pengiriman</span>
+        </a>
+        <a href="#pengaturan" class="nav-item" data-page="pengaturan">
+          <i data-lucide="settings"></i>
+          <span>Pengaturan</span>
+        </a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="topbar-title">
+          <h1 id="page-title">Dashboard</h1>
+        </div>
+        <div class="topbar-profile">
+          <button id="theme-toggle" class="btn-icon-only" title="Ganti Mode Warna">
+            <i data-lucide="moon" id="theme-icon"></i>
+          </button>
+          <div class="user-avatar">AD</div>
+          <span class="user-name">Admin BPJS</span>
+        </div>
+      </header>
+
+      <div id="content-area" class="content-area"></div>
+    </main>
+  </div>
+
+  <div id="modal-patient" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-title">Tambah Peserta REHAB</h3>
+        <button class="btn-icon-only" onclick="closeModal('modal-patient')"><i data-lucide="x"></i></button>
+      </div>
+      <form id="form-patient">
+        <input type="hidden" id="patient-id">
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Nama Peserta *</label>
+            <input type="text" id="patient-name" class="form-control" placeholder="Contoh: Budi Santoso" required>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>No. WhatsApp *</label>
+              <input type="text" id="patient-phone" class="form-control" placeholder="08123456789" required>
+            </div>
+            <div class="form-group">
+              <label>No. Kartu JKN/BPJS *</label>
+              <input type="text" id="patient-card" class="form-control" placeholder="0001234567890" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Nominal Cicilan (Rp) *</label>
+              <input type="number" id="patient-installment" class="form-control" placeholder="150000" required>
+            </div>
+            <div class="form-group">
+              <label>Tanggal Jatuh Tempo *</label>
+              <input type="date" id="patient-due-date" class="form-control" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Status *</label>
+              <select id="patient-status" class="form-control">
+                <option value="Aktif">Aktif</option>
+                <option value="Non-Aktif">Non-Aktif</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Catatan</label>
+              <input type="text" id="patient-notes" class="form-control" placeholder="Opsional">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-patient')">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan Peserta</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="modal-template" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-template-title">Tambah Template Pesan</h3>
+        <button class="btn-icon-only" onclick="closeModal('modal-template')"><i data-lucide="x"></i></button>
+      </div>
+      <form id="form-template">
+        <input type="hidden" id="template-id">
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Judul Template *</label>
+            <input type="text" id="template-name" class="form-control" placeholder="Contoh: Pengingat H-3" required>
+          </div>
+          <div class="form-group">
+            <label>Isi Pesan WhatsApp *</label>
+            <textarea id="template-content" class="form-control" rows="6" placeholder="Gunakan variabel: {nama}, {nomor_peserta}, {nominal}, {tanggal_jatuh_tempo}" required></textarea>
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="template-default"> Jadikan Template Default
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-template')">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan Template</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="modal-delete" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Konfirmasi Hapus</h3>
+        <button class="btn-icon-only" onclick="closeModal('modal-delete')"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <p>Apakah Anda yakin ingin menghapus data <strong id="delete-target-name"></strong>?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-delete')">Batal</button>
+        <button type="button" id="btn-confirm-delete" class="btn btn-danger">Hapus Data</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-wa-preview" class="modal-overlay">
+    <div class="modal" style="max-width: 450px;">
+      <div class="modal-header">
+        <h3>Preview WhatsApp Chat</h3>
+        <button class="btn-icon-only" onclick="closeModal('modal-wa-preview')"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="wa-chat-container">
+          <div class="wa-chat-header">
+            <i data-lucide="user"></i>
+            <span id="wa-preview-receiver">Budi Santoso</span>
+          </div>
+          <div class="wa-chat-body">
+            <div class="wa-bubble" id="wa-preview-body">
+              Pesan akan tampil di sini...
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-wa-preview')">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
