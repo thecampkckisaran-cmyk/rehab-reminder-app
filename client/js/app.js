@@ -5,7 +5,6 @@ const SUPABASE_URL = 'https://gyhrzqhsitgbipqvuqkz.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_vsH4sTBo_bY1buaKmwT4qQ_ZYvZXf20';
 
 const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-
 // Global State
 let currentPatients = [];
 let currentTemplates = [];
