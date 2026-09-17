@@ -1,6 +1,7 @@
 // ==========================================
 // SUPABASE CLIENT INITIALIZATION
 // ==========================================
+// Force update Vercel build
 const SUPABASE_URL = 'https://gyhrzqhsitgbipqvuqkz.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_vsH4sTBo_bY1buaKmwT4qQ_ZYvZXf20';
 
