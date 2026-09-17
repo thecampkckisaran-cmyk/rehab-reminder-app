@@ -1,12 +1,3 @@
-// ==========================================
-// KONFIGURASI SUPABASE
-// ==========================================
-const SUPABASE_URL = 'https://gyhrzqhsitgbipqvuqkz.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_vsH4sTBo_bY1buaKmwT4qQ_ZYvZXf20';
-
-// Inisialisasi client Supabase dari CDN
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
 // Global State
 let currentPatients = [];
 let currentTemplates = [];
@@ -14,7 +5,7 @@ let currentLogs = [];
 let globalSettings = { default_delay: '15' };
 
 let deleteTargetId = null;
-let deleteType = null;
+let deleteType = null; // 'patient', 'template', atau 'log'
 
 let currentPage = 1;
 const itemsPerPage = 10;
@@ -32,7 +23,7 @@ let selectedTemplateId = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
-  if (window.lucide) lucide.createIcons();
+  lucide.createIcons();
 
   const navItems = document.querySelectorAll('.nav-item');
   const pageTitle = document.getElementById('page-title');
@@ -47,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   function navigateTo(pageKey) {
-    if (pageTitle) pageTitle.textContent = pageTitles[pageKey] || 'Dashboard';
+    pageTitle.textContent = pageTitles[pageKey] || 'Dashboard';
     navItems.forEach(nav => {
       if (nav.getAttribute('data-page') === pageKey) nav.classList.add('active');
       else nav.classList.remove('active');
@@ -60,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (pageKey === 'riwayat') renderRiwayatPage();
     else if (pageKey === 'pengaturan') renderPengaturanPage();
 
-    if (window.lucide) lucide.createIcons();
+    lucide.createIcons();
   }
 
   navItems.forEach(item => {
@@ -72,25 +63,18 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Global Event Listeners
-  const formPatient = document.getElementById('form-patient');
-  if (formPatient) formPatient.addEventListener('submit', handleSavePatient);
+  document.getElementById('form-patient').addEventListener('submit', handleSavePatient);
+  document.getElementById('form-template').addEventListener('submit', handleSaveTemplate);
+  document.getElementById('btn-confirm-delete').addEventListener('click', handleConfirmDelete);
+  document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 
-  const formTemplate = document.getElementById('form-template');
-  if (formTemplate) formTemplate.addEventListener('submit', handleSaveTemplate);
-
-  const btnDelete = document.getElementById('btn-confirm-delete');
-  if (btnDelete) btnDelete.addEventListener('click', handleConfirmDelete);
-
-  const btnTheme = document.getElementById('theme-toggle');
-  if (btnTheme) btnTheme.addEventListener('click', toggleTheme);
-
-  // Initial Load
+  // Initial App Load
   fetchSettings();
   navigateTo('dashboard');
 });
 
 // ==========================================
-// UTILITIES & THEME
+// TEMA & UTILITIES
 // ==========================================
 function initTheme() {
   const savedTheme = localStorage.getItem('theme') || 'light';
@@ -110,7 +94,7 @@ function updateThemeIcon(theme) {
   const icon = document.getElementById('theme-icon');
   if (icon) {
     icon.setAttribute('data-lucide', theme === 'dark' ? 'sun' : 'moon');
-    if (window.lucide) lucide.createIcons();
+    lucide.createIcons();
   }
 }
 
@@ -136,25 +120,29 @@ function showToast(message, type = 'success') {
   toast.className = `toast ${type}`;
   toast.innerHTML = `<i data-lucide="${type === 'success' ? 'check-circle' : 'alert-circle'}"></i> <span>${message}</span>`;
   container.appendChild(toast);
-  if (window.lucide) lucide.createIcons();
+  lucide.createIcons();
   setTimeout(() => toast.remove(), 3500);
 }
 
-function openModal(id) {
+function openModal(id) { 
   const el = document.getElementById(id);
-  if (el) el.classList.add('active');
+  if (el) el.classList.add('active'); 
 }
 
-function closeModal(id) {
+function closeModal(id) { 
   const el = document.getElementById(id);
-  if (el) el.classList.remove('active');
+  if (el) el.classList.remove('active'); 
 }
 
 async function fetchSettings() {
   try {
-    const { data, error } = await supabaseClient.from('settings').select('*').single();
-    if (!error && data) globalSettings = data;
-  } catch (e) { console.error(e); }
+    const res = await fetch('/api/settings');
+    if (res.ok) {
+      globalSettings = await res.json();
+    }
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 // ==========================================
@@ -203,29 +191,28 @@ async function renderDashboardPage() {
       </div>
     </div>
   `;
-  if (window.lucide) lucide.createIcons();
+  lucide.createIcons();
 
   try {
-    const todayStr = new Date().toISOString().split('T')[0];
-
-    const { data: patients } = await supabaseClient.from('patients').select('*');
-    const { data: logs } = await supabaseClient.from('logs').select('*').order('sent_at', { ascending: false }).limit(5);
-
-    const totalPatients = patients ? patients.length : 0;
-    const dueToday = patients ? patients.filter(p => p.due_date === todayStr).length : 0;
+    const res = await fetch('/api/dashboard/stats');
+    const data = await res.json();
 
     const elTotal = document.getElementById('stat-total');
     const elToday = document.getElementById('stat-today');
+    const elNotReminded = document.getElementById('stat-not-reminded');
+    const elReminded = document.getElementById('stat-reminded');
     const tbody = document.getElementById('dashboard-recent-logs');
 
-    if (elTotal) elTotal.textContent = totalPatients;
-    if (elToday) elToday.textContent = dueToday;
+    if (elTotal) elTotal.textContent = data.totalPatients;
+    if (elToday) elToday.textContent = data.dueToday;
+    if (elNotReminded) elNotReminded.textContent = data.notReminded;
+    if (elReminded) elReminded.textContent = data.reminded;
 
     if (tbody) {
-      if (!logs || logs.length === 0) {
+      if (data.recentLogs.length === 0) {
         tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Belum ada aktivitas pengiriman.</td></tr>`;
       } else {
-        tbody.innerHTML = logs.map(l => `
+        tbody.innerHTML = data.recentLogs.map(l => `
           <tr>
             <td>${new Date(l.sent_at).toLocaleString('id-ID')}</td>
             <td><strong>${escapeHtml(l.patient_name)}</strong></td>
@@ -241,7 +228,7 @@ async function renderDashboardPage() {
 }
 
 // ==========================================
-// 2. PESERTA PAGE
+// 2. PESERTA REHAB PAGE
 // ==========================================
 function renderPesertaPage() {
   const contentArea = document.getElementById('content-area');
@@ -291,28 +278,16 @@ function renderPesertaPage() {
       <div class="pagination-container" id="pagination-wrapper"></div>
     </div>
   `;
-  if (window.lucide) lucide.createIcons();
+  lucide.createIcons();
   fetchPatients();
 }
 
 async function fetchPatients() {
   try {
-    let query = supabaseClient.from('patients').select('*');
-
-    if (statusFilter !== 'Semua') {
-      query = query.eq('status', statusFilter);
-    }
-    if (searchQuery) {
-      query = query.or(`name.ilike.%${searchQuery}%,phone_number.ilike.%${searchQuery}%,card_number.ilike.%${searchQuery}%`);
-    }
-    if (sortOrder) {
-      query = query.order('due_date', { ascending: sortOrder === 'asc' });
-    }
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    currentPatients = data || [];
+    const response = await fetch(`/api/patients?search=${encodeURIComponent(searchQuery)}&status=${statusFilter}&sort=${sortOrder}`);
+    const resData = await response.json();
+    if (!response.ok) throw new Error(resData.error || 'Gagal mengambil data');
+    currentPatients = resData.data || [];
     renderPatientTableData();
   } catch (err) {
     showToast(err.message, 'error');
@@ -327,7 +302,7 @@ function renderPatientTableData() {
   if (currentPatients.length === 0) {
     tbody.innerHTML = `<tr><td colspan="8" class="empty-state"><i data-lucide="inbox"></i><p>Tidak ada data peserta ditemukan</p></td></tr>`;
     if (pagWrapper) pagWrapper.innerHTML = '';
-    if (window.lucide) lucide.createIcons();
+    lucide.createIcons();
     return;
   }
 
@@ -361,7 +336,7 @@ function renderPatientTableData() {
       </div>
     `;
   }
-  if (window.lucide) lucide.createIcons();
+  lucide.createIcons();
 }
 
 function handleSearch(e) { searchQuery = e.target.value; currentPage = 1; fetchPatients(); }
@@ -405,16 +380,10 @@ async function handleSavePatient(e) {
   };
 
   try {
-    let error;
-    if (id) {
-      const res = await supabaseClient.from('patients').update(payload).eq('id', id);
-      error = res.error;
-    } else {
-      const res = await supabaseClient.from('patients').insert([payload]);
-      error = res.error;
-    }
-
-    if (error) throw error;
+    const url = id ? `/api/patients/${id}` : '/api/patients';
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (!res.ok) throw new Error((await res.json()).error);
     closeModal('modal-patient');
     showToast(`Peserta berhasil ${id ? 'diperbarui' : 'ditambahkan'}!`, 'success');
     fetchPatients();
@@ -433,7 +402,9 @@ async function renderReminderPage() {
       <div class="search-filter-group">
         <select id="reminder-category" class="form-control" onchange="loadReminderQueue()">
           <option value="today">Jatuh Tempo Hari Ini</option>
-          <option value="all">Semua Peserta Aktif</option>
+          <option value="h-1">H-1 Jatuh Tempo</option>
+          <option value="h-3">H-3 Jatuh Tempo</option>
+          <option value="overdue">Terlambat (Overdue)</option>
         </select>
         <select id="reminder-template" class="form-control" onchange="selectedTemplateId = this.value">
           <option value="">-- Pilih Template Pesan --</option>
@@ -442,6 +413,7 @@ async function renderReminderPage() {
           <option value="10">Jeda 10 Detik</option>
           <option value="15" selected>Jeda 15 Detik</option>
           <option value="20">Jeda 20 Detik</option>
+          <option value="30">Jeda 30 Detik</option>
         </select>
       </div>
       <div class="search-filter-group">
@@ -451,6 +423,7 @@ async function renderReminderPage() {
       </div>
     </div>
 
+    <!-- Active Queue Card -->
     <div class="queue-control-card">
       <div class="queue-header">
         <div>
@@ -484,15 +457,16 @@ async function renderReminderPage() {
       </div>
     </div>
   `;
-  if (window.lucide) lucide.createIcons();
+  lucide.createIcons();
 
-  // Fetch Templates for Dropdown
+  // Load Templates Select
   try {
-    const { data: templates } = await supabaseClient.from('templates').select('*');
-    currentTemplates = templates || [];
+    const resT = await fetch('/api/templates');
+    const templates = await resT.json();
+    currentTemplates = templates;
     const sel = document.getElementById('reminder-template');
-    if (sel && currentTemplates.length > 0) {
-      currentTemplates.forEach(t => {
+    if (sel) {
+      templates.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.id;
         opt.textContent = t.title + (t.is_default ? ' (Default)' : '');
@@ -507,20 +481,25 @@ async function renderReminderPage() {
 }
 
 async function loadReminderQueue() {
+  const catEl = document.getElementById('reminder-category');
+  if (!catEl) return;
+  const cat = catEl.value;
   const tbody = document.getElementById('reminder-table-body');
   try {
-    const { data: patients, error } = await supabaseClient.from('patients').select('*').eq('status', 'Aktif');
-    if (error) throw error;
+    const res = await fetch(`/api/patients?category=${cat}`);
+    const resData = await res.json();
+    reminderQueue = resData.data || [];
 
-    reminderQueue = patients || [];
     if (!tbody) return;
 
     if (reminderQueue.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty-state"><p>Tidak ada peserta aktif.</p></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="empty-state"><p>Tidak ada peserta pada kategori ini.</p></td></tr>`;
+      const progEl = document.getElementById('queue-progress-text');
+      if (progEl) progEl.textContent = `0 dari 0 peserta diproses`;
       return;
     }
 
-    tbody.innerHTML = reminderQueue.map((p) => `
+    tbody.innerHTML = reminderQueue.map((p, idx) => `
       <tr>
         <td><input type="checkbox" class="queue-item-checkbox" data-id="${p.id}" checked></td>
         <td><strong>${escapeHtml(p.name)}</strong></td>
@@ -534,7 +513,9 @@ async function loadReminderQueue() {
         </td>
       </tr>
     `).join('');
-    if (window.lucide) lucide.createIcons();
+    lucide.createIcons();
+    const progEl = document.getElementById('queue-progress-text');
+    if (progEl) progEl.textContent = `0 dari ${reminderQueue.length} peserta diproses`;
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -559,37 +540,60 @@ async function openWaSingle(patientId) {
   const template = currentTemplates.find(t => String(t.id) === String(selectedTemplateId)) || currentTemplates[0];
   const msg = template ? compileMessage(template.content, p) : `Pengingat Tagihan REHAB BPJS untuk ${p.name}`;
 
+  // Cek Log Duplikat Hari Ini
   try {
-    await supabaseClient.from('logs').insert([{
-      patient_id: p.id,
-      patient_name: p.name,
-      phone_number: p.phone_number,
-      template_title: template ? template.title : 'Manual',
-      message_content: msg,
-      status: 'Dibuka'
-    }]);
+    const resLogs = await fetch('/api/logs');
+    const logs = await resLogs.json();
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const existingLog = (logs || []).find(l => 
+      String(l.patient_id) === String(p.id) && 
+      l.sent_at && l.sent_at.startsWith(todayStr)
+    );
+
+    if (!existingLog) {
+      await fetch('/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patient_id: p.id,
+          patient_name: p.name,
+          phone_number: p.phone_number,
+          template_title: template ? template.title : 'Manual',
+          message_content: msg,
+          status: 'Dibuka'
+        })
+      });
+    }
   } catch (e) { console.error(e); }
 
+  // Buka Link WA
   let phone = p.phone_number.replace(/[^0-9]/g, '');
   if (phone.startsWith('0')) phone = '62' + phone.slice(1);
   const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
   window.open(waUrl, '_blank');
 }
 
+// Queue Execution Logic
 function startQueue() {
   const selectedCheckboxes = document.querySelectorAll('.queue-item-checkbox:checked');
   if (selectedCheckboxes.length === 0) {
-    showToast('Pilih minimal satu peserta!', 'error');
+    showToast('Pilih minimal satu peserta untuk antrean!', 'error');
     return;
   }
+
   isQueuePaused = false;
   currentQueueIndex = 0;
+  const statusEl = document.getElementById('queue-status-title');
+  if (statusEl) statusEl.textContent = 'Status Antrean: Berjalan...';
   processNextInQueue();
 }
 
 function pauseQueue() {
   isQueuePaused = true;
   clearInterval(queueTimer);
+  const statusEl = document.getElementById('queue-status-title');
+  if (statusEl) statusEl.textContent = 'Status Antrean: Di-pause';
   showToast('Antrean di-pause', 'warning');
 }
 
@@ -597,29 +601,43 @@ function stopQueue() {
   isQueuePaused = false;
   clearInterval(queueTimer);
   currentQueueIndex = 0;
+  const timerEl = document.getElementById('timer-display');
+  const statusEl = document.getElementById('queue-status-title');
+  if (timerEl) timerEl.textContent = '0s';
+  if (statusEl) statusEl.textContent = 'Status Antrean: Dihentikan';
   showToast('Antrean dihentikan', 'error');
 }
 
 function processNextInQueue() {
   const selectedCheckboxes = Array.from(document.querySelectorAll('.queue-item-checkbox:checked'));
+  const statusEl = document.getElementById('queue-status-title');
+  
   if (currentQueueIndex >= selectedCheckboxes.length) {
+    if (statusEl) statusEl.textContent = 'Status Antrean: Selesai';
     showToast('Seluruh antrean telah diproses!', 'success');
     return;
   }
+
   if (isQueuePaused) return;
 
   const targetId = selectedCheckboxes[currentQueueIndex].getAttribute('data-id');
   openWaSingle(parseInt(targetId));
 
   currentQueueIndex++;
+  const progEl = document.getElementById('queue-progress-text');
+  if (progEl) progEl.textContent = `${currentQueueIndex} dari ${selectedCheckboxes.length} peserta diproses`;
+
   const delayEl = document.getElementById('reminder-delay');
   const delaySec = delayEl ? (parseInt(delayEl.value) || 15) : 15;
   countdownValue = delaySec;
+  const timerEl = document.getElementById('timer-display');
+  if (timerEl) timerEl.textContent = `${countdownValue}s`;
 
   clearInterval(queueTimer);
   queueTimer = setInterval(() => {
     if (isQueuePaused) return;
     countdownValue--;
+    if (timerEl) timerEl.textContent = `${countdownValue}s`;
     if (countdownValue <= 0) {
       clearInterval(queueTimer);
       processNextInQueue();
@@ -628,7 +646,7 @@ function processNextInQueue() {
 }
 
 // ==========================================
-// 4. TEMPLATE PAGE
+// 4. TEMPLATE PESAN PAGE
 // ==========================================
 async function renderTemplatePage() {
   const contentArea = document.getElementById('content-area');
@@ -641,43 +659,44 @@ async function renderTemplatePage() {
       <div class="loading-state"><i data-lucide="loader"></i> Memuat template...</div>
     </div>
   `;
-  if (window.lucide) lucide.createIcons();
+  lucide.createIcons();
   fetchTemplates();
 }
 
 async function fetchTemplates() {
   try {
-    const { data, error } = await supabaseClient.from('templates').select('*');
-    if (error) throw error;
-
-    currentTemplates = data || [];
+    const res = await fetch('/api/templates');
+    const data = await res.json();
+    currentTemplates = data;
     const grid = document.getElementById('template-card-grid');
     if (!grid) return;
 
-    if (currentTemplates.length === 0) {
+    if (data.length === 0) {
       grid.innerHTML = `<div class="empty-state"><p>Belum ada template pesan.</p></div>`;
       return;
     }
 
-    grid.innerHTML = currentTemplates.map(t => `
+    grid.innerHTML = data.map(t => `
       <div class="table-card" style="padding: 20px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
           <h4>${escapeHtml(t.title)} ${t.is_default ? '<span class="badge badge-success">Default</span>' : ''}</h4>
           <div>
+            <button class="btn-icon-only" onclick="previewTemplateModal(${t.id})"><i data-lucide="eye"></i></button>
             <button class="btn-icon-only" onclick="openEditTemplateModal(${t.id})"><i data-lucide="edit-2"></i></button>
             <button class="btn-icon-only danger" onclick="openDeleteModal('template', ${t.id}, '${escapeHtml(t.title)}')"><i data-lucide="trash-2"></i></button>
           </div>
         </div>
-        <p style="font-size:0.85rem; color:var(--text-muted); white-space:pre-wrap; padding:12px; border-radius:8px;">${escapeHtml(t.content)}</p>
+        <p style="font-size:0.85rem; color:var(--text-muted); white-space:pre-wrap; background:rgba(0,0,0,0.02); padding:12px; border-radius:8px;">${escapeHtml(t.content)}</p>
       </div>
     `).join('');
-    if (window.lucide) lucide.createIcons();
+    lucide.createIcons();
   } catch (err) { showToast(err.message, 'error'); }
 }
 
 function openAddTemplateModal() {
   document.getElementById('template-id').value = '';
   document.getElementById('form-template').reset();
+  document.getElementById('modal-template-title').textContent = 'Tambah Template Pesan';
   openModal('modal-template');
 }
 
@@ -688,7 +707,19 @@ function openEditTemplateModal(id) {
   document.getElementById('template-name').value = t.title;
   document.getElementById('template-content').value = t.content;
   document.getElementById('template-default').checked = t.is_default;
+  document.getElementById('modal-template-title').textContent = 'Edit Template Pesan';
   openModal('modal-template');
+}
+
+function previewTemplateModal(id) {
+  const t = currentTemplates.find(item => item.id === id);
+  if (!t) return;
+  const sample = { name: 'Budi Santoso', card_number: '000123456789', installment_amount: 150000, due_date: '2026-09-20' };
+  const recEl = document.getElementById('wa-preview-receiver');
+  const bodyEl = document.getElementById('wa-preview-body');
+  if (recEl) recEl.textContent = 'Preview Template';
+  if (bodyEl) bodyEl.textContent = compileMessage(t.content, sample);
+  openModal('modal-wa-preview');
 }
 
 async function handleSaveTemplate(e) {
@@ -701,15 +732,10 @@ async function handleSaveTemplate(e) {
   };
 
   try {
-    let error;
-    if (id) {
-      const res = await supabaseClient.from('templates').update(payload).eq('id', id);
-      error = res.error;
-    } else {
-      const res = await supabaseClient.from('templates').insert([payload]);
-      error = res.error;
-    }
-    if (error) throw error;
+    const url = id ? `/api/templates/${id}` : '/api/templates';
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (!res.ok) throw new Error((await res.json()).error);
     closeModal('modal-template');
     showToast('Template berhasil disimpan!', 'success');
     fetchTemplates();
@@ -717,14 +743,14 @@ async function handleSaveTemplate(e) {
 }
 
 // ==========================================
-// 5. RIWAYAT PAGE
+// 5. RIWAYAT PENGIRIMAN PAGE
 // ==========================================
 async function renderRiwayatPage() {
   const contentArea = document.getElementById('content-area');
   contentArea.innerHTML = `
     <div class="table-card">
       <div class="toolbar" style="padding: 16px 20px; margin-bottom: 0;">
-        <h3>Riwayat Pengiriman</h3>
+        <h3>Riwayat & Konfirmasi Pengiriman</h3>
       </div>
       <div class="table-responsive">
         <table class="table">
@@ -745,25 +771,24 @@ async function renderRiwayatPage() {
       </div>
     </div>
   `;
-  if (window.lucide) lucide.createIcons();
+  lucide.createIcons();
   fetchLogs();
 }
 
 async function fetchLogs() {
   try {
-    const { data, error } = await supabaseClient.from('logs').select('*').order('sent_at', { ascending: false });
-    if (error) throw error;
-
-    currentLogs = data || [];
+    const res = await fetch('/api/logs');
+    const data = await res.json();
+    currentLogs = data;
     const tbody = document.getElementById('logs-table-body');
     if (!tbody) return;
 
-    if (currentLogs.length === 0) {
+    if (data.length === 0) {
       tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Belum ada riwayat pengiriman.</td></tr>`;
       return;
     }
 
-    tbody.innerHTML = currentLogs.map(l => `
+    tbody.innerHTML = data.map(l => `
       <tr>
         <td>${new Date(l.sent_at).toLocaleString('id-ID')}</td>
         <td><strong>${escapeHtml(l.patient_name)}</strong></td>
@@ -771,13 +796,28 @@ async function fetchLogs() {
         <td>${escapeHtml(l.template_title || '-')}</td>
         <td><span class="badge ${l.status === 'Terkirim' ? 'badge-success' : 'badge-warning'}">${l.status}</span></td>
         <td>
-          <button class="btn-icon-only danger" onclick="openDeleteModal('log', ${l.id}, 'Riwayat ${escapeHtml(l.patient_name)}')" title="Hapus">
-            <i data-lucide="trash-2"></i>
-          </button>
+          <div style="display:flex; align-items:center; gap:8px;">
+            ${l.status === 'Dibuka' 
+              ? `<button class="btn btn-success" style="padding:4px 10px; font-size:0.8rem;" onclick="confirmSent(${l.id})"><i data-lucide="check"></i> Set "Sudah Dikirim"</button>`
+              : `<small class="text-muted"><i data-lucide="check-circle-2"></i> Konfirmasi (${new Date(l.confirmed_at).toLocaleTimeString('id-ID')})</small>`
+            }
+            <button class="btn-icon-only danger" onclick="openDeleteModal('log', ${l.id}, 'Riwayat ${escapeHtml(l.patient_name)}')" title="Hapus Riwayat">
+              <i data-lucide="trash-2"></i>
+            </button>
+          </div>
         </td>
       </tr>
     `).join('');
-    if (window.lucide) lucide.createIcons();
+    lucide.createIcons();
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function confirmSent(logId) {
+  try {
+    const res = await fetch(`/api/logs/${logId}/confirm`, { method: 'PUT' });
+    if (!res.ok) throw new Error((await res.json()).error);
+    showToast('Status berhasil diubah menjadi Terkirim!', 'success');
+    fetchLogs();
   } catch (err) { showToast(err.message, 'error'); }
 }
 
@@ -798,22 +838,26 @@ function renderPengaturanPage() {
       </form>
     </div>
   `;
-  if (window.lucide) lucide.createIcons();
+  lucide.createIcons();
 }
 
 async function handleSaveSettings(e) {
   e.preventDefault();
   const delay = document.getElementById('setting-delay').value;
   try {
-    const { error } = await supabaseClient.from('settings').upsert([{ id: 1, default_delay: delay }]);
-    if (error) throw error;
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ default_delay: delay })
+    });
+    if (!res.ok) throw new Error((await res.json()).error);
     globalSettings.default_delay = delay;
     showToast('Pengaturan berhasil disimpan!', 'success');
   } catch (err) { showToast(err.message, 'error'); }
 }
 
 // ==========================================
-// DELETE HANDLER
+// CONFIRM DELETE HANDLER (HAPUS PESERTA / TEMPLATE / LOG)
 // ==========================================
 function openDeleteModal(type, id, name) {
   deleteType = type;
@@ -825,18 +869,23 @@ function openDeleteModal(type, id, name) {
 
 async function handleConfirmDelete() {
   if (!deleteTargetId || !deleteType) return;
-
-  let tableName = '';
-  if (deleteType === 'patient') tableName = 'patients';
-  else if (deleteType === 'template') tableName = 'templates';
-  else if (deleteType === 'log') tableName = 'logs';
+  
+  let endpoint = '';
+  if (deleteType === 'patient') endpoint = `/api/patients/${deleteTargetId}`;
+  else if (deleteType === 'template') endpoint = `/api/templates/${deleteTargetId}`;
+  else if (deleteType === 'log') endpoint = `/api/logs/${deleteTargetId}`;
 
   try {
-    const { error } = await supabaseClient.from(tableName).delete().eq('id', deleteTargetId);
-    if (error) throw error;
-
+    const res = await fetch(endpoint, { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json()).error);
     closeModal('modal-delete');
-    showToast(`Data berhasil dihapus!`, 'success');
+    
+    let itemLabel = 'Data';
+    if (deleteType === 'patient') itemLabel = 'Peserta';
+    else if (deleteType === 'template') itemLabel = 'Template';
+    else if (deleteType === 'log') itemLabel = 'Riwayat';
+
+    showToast(`${itemLabel} berhasil dihapus!`, 'success');
 
     if (deleteType === 'patient') fetchPatients();
     else if (deleteType === 'template') fetchTemplates();
