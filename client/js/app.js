@@ -1,3 +1,11 @@
+// ==========================================
+// SUPABASE CONFIGURATION
+// ==========================================
+const SUPABASE_URL = 'https://gyhrzqhsitgbipqvuqkz.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_vsH4sTBo_bY1buaKmwT4qQ_ZYvZXf20';
+
+const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
 // Global State
 let currentPatients = [];
 let currentTemplates = [];
@@ -136,10 +144,9 @@ function closeModal(id) {
 
 async function fetchSettings() {
   try {
-    const res = await fetch('/api/settings');
-    if (res.ok) {
-      globalSettings = await res.json();
-    }
+    if (!supabase) return;
+    const { data } = await supabase.from('settings').select('*').single();
+    if (data) globalSettings = data;
   } catch (e) {
     console.error(e);
   }
@@ -194,8 +201,16 @@ async function renderDashboardPage() {
   lucide.createIcons();
 
   try {
-    const res = await fetch('/api/dashboard/stats');
-    const data = await res.json();
+    if (!supabase) return;
+    const { data: patients } = await supabase.from('patients').select('*');
+    const { data: logs } = await supabase.from('logs').select('*').order('sent_at', { ascending: false });
+
+    const totalPatients = patients ? patients.length : 0;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const dueToday = patients ? patients.filter(p => p.due_date === todayStr).length : 0;
+
+    const remindedCount = logs ? logs.filter(l => l.status === 'Terkirim').length : 0;
+    const notRemindedCount = Math.max(0, totalPatients - remindedCount);
 
     const elTotal = document.getElementById('stat-total');
     const elToday = document.getElementById('stat-today');
@@ -203,16 +218,17 @@ async function renderDashboardPage() {
     const elReminded = document.getElementById('stat-reminded');
     const tbody = document.getElementById('dashboard-recent-logs');
 
-    if (elTotal) elTotal.textContent = data.totalPatients;
-    if (elToday) elToday.textContent = data.dueToday;
-    if (elNotReminded) elNotReminded.textContent = data.notReminded;
-    if (elReminded) elReminded.textContent = data.reminded;
+    if (elTotal) elTotal.textContent = totalPatients;
+    if (elToday) elToday.textContent = dueToday;
+    if (elNotReminded) elNotReminded.textContent = notRemindedCount;
+    if (elReminded) elReminded.textContent = remindedCount;
 
     if (tbody) {
-      if (data.recentLogs.length === 0) {
+      const recentLogs = logs ? logs.slice(0, 5) : [];
+      if (recentLogs.length === 0) {
         tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Belum ada aktivitas pengiriman.</td></tr>`;
       } else {
-        tbody.innerHTML = data.recentLogs.map(l => `
+        tbody.innerHTML = recentLogs.map(l => `
           <tr>
             <td>${new Date(l.sent_at).toLocaleString('id-ID')}</td>
             <td><strong>${escapeHtml(l.patient_name)}</strong></td>
@@ -284,10 +300,26 @@ function renderPesertaPage() {
 
 async function fetchPatients() {
   try {
-    const response = await fetch(`/api/patients?search=${encodeURIComponent(searchQuery)}&status=${statusFilter}&sort=${sortOrder}`);
-    const resData = await response.json();
-    if (!response.ok) throw new Error(resData.error || 'Gagal mengambil data');
-    currentPatients = resData.data || [];
+    if (!supabase) return;
+    let query = supabase.from('patients').select('*');
+
+    if (statusFilter !== 'Semua') query = query.eq('status', statusFilter);
+    if (sortOrder) query = query.order('due_date', { ascending: sortOrder === 'asc' });
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    let result = data || [];
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(p => 
+        (p.name && p.name.toLowerCase().includes(q)) ||
+        (p.phone_number && p.phone_number.includes(q)) ||
+        (p.card_number && p.card_number.includes(q))
+      );
+    }
+
+    currentPatients = result;
     renderPatientTableData();
   } catch (err) {
     showToast(err.message, 'error');
@@ -380,10 +412,11 @@ async function handleSavePatient(e) {
   };
 
   try {
-    const url = id ? `/api/patients/${id}` : '/api/patients';
-    const method = id ? 'PUT' : 'POST';
-    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (!res.ok) throw new Error((await res.json()).error);
+    if (id) {
+      await supabase.from('patients').update(payload).eq('id', id);
+    } else {
+      await supabase.from('patients').insert([payload]);
+    }
     closeModal('modal-patient');
     showToast(`Peserta berhasil ${id ? 'diperbarui' : 'ditambahkan'}!`, 'success');
     fetchPatients();
@@ -459,14 +492,12 @@ async function renderReminderPage() {
   `;
   lucide.createIcons();
 
-  // Load Templates Select
   try {
-    const resT = await fetch('/api/templates');
-    const templates = await resT.json();
-    currentTemplates = templates;
+    const { data: templates } = await supabase.from('templates').select('*');
+    currentTemplates = templates || [];
     const sel = document.getElementById('reminder-template');
-    if (sel) {
-      templates.forEach(t => {
+    if (sel && currentTemplates.length > 0) {
+      currentTemplates.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.id;
         opt.textContent = t.title + (t.is_default ? ' (Default)' : '');
@@ -486,9 +517,24 @@ async function loadReminderQueue() {
   const cat = catEl.value;
   const tbody = document.getElementById('reminder-table-body');
   try {
-    const res = await fetch(`/api/patients?category=${cat}`);
-    const resData = await res.json();
-    reminderQueue = resData.data || [];
+    const { data } = await supabase.from('patients').select('*').eq('status', 'Aktif');
+    let list = data || [];
+
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    reminderQueue = list.filter(p => {
+      if (!p.due_date) return false;
+      const due = new Date(p.due_date);
+      due.setHours(0,0,0,0);
+      const diffDays = Math.round((due - today) / (1000 * 60 * 60 * 24));
+
+      if (cat === 'today') return diffDays === 0;
+      if (cat === 'h-1') return diffDays === 1;
+      if (cat === 'h-3') return diffDays === 3;
+      if (cat === 'overdue') return diffDays < 0;
+      return true;
+    });
 
     if (!tbody) return;
 
@@ -499,7 +545,7 @@ async function loadReminderQueue() {
       return;
     }
 
-    tbody.innerHTML = reminderQueue.map((p, idx) => `
+    tbody.innerHTML = reminderQueue.map(p => `
       <tr>
         <td><input type="checkbox" class="queue-item-checkbox" data-id="${p.id}" checked></td>
         <td><strong>${escapeHtml(p.name)}</strong></td>
@@ -540,41 +586,31 @@ async function openWaSingle(patientId) {
   const template = currentTemplates.find(t => String(t.id) === String(selectedTemplateId)) || currentTemplates[0];
   const msg = template ? compileMessage(template.content, p) : `Pengingat Tagihan REHAB BPJS untuk ${p.name}`;
 
-  // Cek Log Duplikat Hari Ini
   try {
-    const resLogs = await fetch('/api/logs');
-    const logs = await resLogs.json();
     const todayStr = new Date().toISOString().split('T')[0];
+    const { data: logs } = await supabase.from('logs').select('*').eq('patient_id', p.id);
 
-    const existingLog = (logs || []).find(l => 
-      String(l.patient_id) === String(p.id) && 
-      l.sent_at && l.sent_at.startsWith(todayStr)
-    );
+    const existingLog = (logs || []).find(l => l.sent_at && l.sent_at.startsWith(todayStr));
 
     if (!existingLog) {
-      await fetch('/api/logs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          patient_id: p.id,
-          patient_name: p.name,
-          phone_number: p.phone_number,
-          template_title: template ? template.title : 'Manual',
-          message_content: msg,
-          status: 'Dibuka'
-        })
-      });
+      await supabase.from('logs').insert([{
+        patient_id: p.id,
+        patient_name: p.name,
+        phone_number: p.phone_number,
+        template_title: template ? template.title : 'Manual',
+        message_content: msg,
+        status: 'Dibuka',
+        sent_at: new Date().toISOString()
+      }]);
     }
   } catch (e) { console.error(e); }
 
-  // Buka Link WA
   let phone = p.phone_number.replace(/[^0-9]/g, '');
   if (phone.startsWith('0')) phone = '62' + phone.slice(1);
   const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
   window.open(waUrl, '_blank');
 }
 
-// Queue Execution Logic
 function startQueue() {
   const selectedCheckboxes = document.querySelectorAll('.queue-item-checkbox:checked');
   if (selectedCheckboxes.length === 0) {
@@ -665,18 +701,17 @@ async function renderTemplatePage() {
 
 async function fetchTemplates() {
   try {
-    const res = await fetch('/api/templates');
-    const data = await res.json();
-    currentTemplates = data;
+    const { data } = await supabase.from('templates').select('*');
+    currentTemplates = data || [];
     const grid = document.getElementById('template-card-grid');
     if (!grid) return;
 
-    if (data.length === 0) {
+    if (currentTemplates.length === 0) {
       grid.innerHTML = `<div class="empty-state"><p>Belum ada template pesan.</p></div>`;
       return;
     }
 
-    grid.innerHTML = data.map(t => `
+    grid.innerHTML = currentTemplates.map(t => `
       <div class="table-card" style="padding: 20px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
           <h4>${escapeHtml(t.title)} ${t.is_default ? '<span class="badge badge-success">Default</span>' : ''}</h4>
@@ -732,10 +767,11 @@ async function handleSaveTemplate(e) {
   };
 
   try {
-    const url = id ? `/api/templates/${id}` : '/api/templates';
-    const method = id ? 'PUT' : 'POST';
-    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (!res.ok) throw new Error((await res.json()).error);
+    if (id) {
+      await supabase.from('templates').update(payload).eq('id', id);
+    } else {
+      await supabase.from('templates').insert([payload]);
+    }
     closeModal('modal-template');
     showToast('Template berhasil disimpan!', 'success');
     fetchTemplates();
@@ -777,18 +813,17 @@ async function renderRiwayatPage() {
 
 async function fetchLogs() {
   try {
-    const res = await fetch('/api/logs');
-    const data = await res.json();
-    currentLogs = data;
+    const { data } = await supabase.from('logs').select('*').order('sent_at', { ascending: false });
+    currentLogs = data || [];
     const tbody = document.getElementById('logs-table-body');
     if (!tbody) return;
 
-    if (data.length === 0) {
+    if (currentLogs.length === 0) {
       tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Belum ada riwayat pengiriman.</td></tr>`;
       return;
     }
 
-    tbody.innerHTML = data.map(l => `
+    tbody.innerHTML = currentLogs.map(l => `
       <tr>
         <td>${new Date(l.sent_at).toLocaleString('id-ID')}</td>
         <td><strong>${escapeHtml(l.patient_name)}</strong></td>
@@ -799,7 +834,7 @@ async function fetchLogs() {
           <div style="display:flex; align-items:center; gap:8px;">
             ${l.status === 'Dibuka' 
               ? `<button class="btn btn-success" style="padding:4px 10px; font-size:0.8rem;" onclick="confirmSent(${l.id})"><i data-lucide="check"></i> Set "Sudah Dikirim"</button>`
-              : `<small class="text-muted"><i data-lucide="check-circle-2"></i> Konfirmasi (${new Date(l.confirmed_at).toLocaleTimeString('id-ID')})</small>`
+              : `<small class="text-muted"><i data-lucide="check-circle-2"></i> Konfirmasi (${l.confirmed_at ? new Date(l.confirmed_at).toLocaleTimeString('id-ID') : '-'})</small>`
             }
             <button class="btn-icon-only danger" onclick="openDeleteModal('log', ${l.id}, 'Riwayat ${escapeHtml(l.patient_name)}')" title="Hapus Riwayat">
               <i data-lucide="trash-2"></i>
@@ -814,8 +849,13 @@ async function fetchLogs() {
 
 async function confirmSent(logId) {
   try {
-    const res = await fetch(`/api/logs/${logId}/confirm`, { method: 'PUT' });
-    if (!res.ok) throw new Error((await res.json()).error);
+    const { error } = await supabase
+      .from('logs')
+      .update({ status: 'Terkirim', confirmed_at: new Date().toISOString() })
+      .eq('id', logId);
+
+    if (error) throw error;
+
     showToast('Status berhasil diubah menjadi Terkirim!', 'success');
     fetchLogs();
   } catch (err) { showToast(err.message, 'error'); }
@@ -845,19 +885,14 @@ async function handleSaveSettings(e) {
   e.preventDefault();
   const delay = document.getElementById('setting-delay').value;
   try {
-    const res = await fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ default_delay: delay })
-    });
-    if (!res.ok) throw new Error((await res.json()).error);
+    await supabase.from('settings').upsert({ id: 1, default_delay: delay });
     globalSettings.default_delay = delay;
     showToast('Pengaturan berhasil disimpan!', 'success');
   } catch (err) { showToast(err.message, 'error'); }
 }
 
 // ==========================================
-// CONFIRM DELETE HANDLER (HAPUS PESERTA / TEMPLATE / LOG)
+// CONFIRM DELETE HANDLER
 // ==========================================
 function openDeleteModal(type, id, name) {
   deleteType = type;
@@ -869,17 +904,18 @@ function openDeleteModal(type, id, name) {
 
 async function handleConfirmDelete() {
   if (!deleteTargetId || !deleteType) return;
-  
-  let endpoint = '';
-  if (deleteType === 'patient') endpoint = `/api/patients/${deleteTargetId}`;
-  else if (deleteType === 'template') endpoint = `/api/templates/${deleteTargetId}`;
-  else if (deleteType === 'log') endpoint = `/api/logs/${deleteTargetId}`;
 
   try {
-    const res = await fetch(endpoint, { method: 'DELETE' });
-    if (!res.ok) throw new Error((await res.json()).error);
+    let tableName = '';
+    if (deleteType === 'patient') tableName = 'patients';
+    else if (deleteType === 'template') tableName = 'templates';
+    else if (deleteType === 'log') tableName = 'logs';
+
+    const { error } = await supabase.from(tableName).delete().eq('id', deleteTargetId);
+    if (error) throw error;
+
     closeModal('modal-delete');
-    
+
     let itemLabel = 'Data';
     if (deleteType === 'patient') itemLabel = 'Peserta';
     else if (deleteType === 'template') itemLabel = 'Template';
