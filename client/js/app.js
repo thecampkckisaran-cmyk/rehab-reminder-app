@@ -2,7 +2,7 @@
 // KONFIGURASI SUPABASE
 // ==========================================
 const SUPABASE_URL = 'https://gyhrzqhsitgbipqvuqkz.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_vsh4sTBo_bY1buaKmwT4qQ_ZYvZXf20';
+const SUPABASE_ANON_KEY = 'sb_publishable_vsH4sTBo_bY1buaKmwT4qQ_ZYvZXf20';
 
 // Inisialisasi client Supabase dari CDN
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
